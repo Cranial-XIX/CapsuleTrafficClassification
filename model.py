@@ -47,7 +47,7 @@ class CapsuleLayer(nn.Module):
         self.softmax = nn.Softmax(dim=2)
 
         if n_nodes != -1: # caps -> caps layer
-            self.route_weights = nn.Parameter(
+            self.route_weights = nn.Parameter(0.1 *
                 torch.randn(1, n_nodes, n_caps, in_C, out_C))
         else:   # conv -> caps layer
             self.capsules = nn.ModuleList([nn.Conv2d(
@@ -61,7 +61,7 @@ class CapsuleLayer(nn.Module):
 
     def forward(self, x):
         if self.n_nodes != -1:
-            priors = x[:, :, None, None, :] @ self.route_weights
+            priors = (x[:, :, None, None, :] @ self.route_weights).squeeze(4)
             logits = torch.zeros(*priors.size())
             # dynamic routing
             for i in range(self.n_iter):
@@ -134,8 +134,6 @@ def test(model, X_te, y_te, mode):
     accuracy = 0.0
     for X, y in zip(X_split, y_split):
         prediction = model(torch.from_numpy(X).float().permute(0, 3, 1, 2))
-        print(y)
-        print(prediction.numpy())
         accuracy += np.sum(y == prediction.numpy())
     print("%s Accuracy  %.2f" % (mode, accuracy/len(y_te)))
 
@@ -151,7 +149,7 @@ def main():
     X_tr, y_tr = X_tr[:8], y_tr[:8]
     X_te, y_te = X_te[:128], y_te[:128]
     convnet = CapsuleNet()#ConvNet()
-    optimizer = Adam(convnet.parameters(), lr=1e-4)
+    optimizer = Adam(convnet.parameters())
     for epoch in range(30):
         print(("Epoch %d " + "-"*70) % (epoch+1))
         train(convnet, optimizer, X_tr, y_tr)
