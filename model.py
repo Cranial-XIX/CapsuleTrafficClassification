@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,6 +9,14 @@ from torch.optim import Adam
 
 BATCH_SIZE = 8
 NUM_CLASSES = 43
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', default='cnn', help='cnn | capsule')
+parser.add_argument('--seed', default=0, help='random seed')
+args = parser.parse_args()
+
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -28,7 +37,7 @@ class ConvNet(nn.Module):
 
     def forward(self, x, y=None):
         conv = self.conv(x)
-        scores = self.fc2(self.relu(self.fc1(conv.view(64, -1))))
+        scores = self.fc2(self.relu(self.fc1(conv.view(BATCH_SIZE, -1))))
         if y is None:
             _, prediction = scores.max(dim=1)
             return prediction
@@ -122,7 +131,7 @@ def train(model, optimizer, X_tr, y_tr):
         loss.backward()
         optimizer.step()
         tot_loss += loss.item()
-        print(" batch {} [{:.1f}%] loss: {:.2f}".format(
+        print(" batch {} [{:.1f}%] loss: {:.4f}".format(
             bch+1, 100 * (bch+1)/num_batch, loss.item()/len(y)))
     print(" Total loss %.2f" % (tot_loss/len(y_tr)))
 
@@ -148,14 +157,12 @@ def main():
     X_tr, y_tr, X_te, y_te = load_data()
     X_tr, y_tr = X_tr[:8], y_tr[:8]
     X_te, y_te = X_te[:128], y_te[:128]
-    convnet = CapsuleNet()#ConvNet()
-    optimizer = Adam(convnet.parameters())
+    model = ConvNet() if args.model == 'cnn' else CapsuleNet()
+    optimizer = Adam(model.parameters())
     for epoch in range(30):
         print(("Epoch %d " + "-"*70) % (epoch+1))
-        train(convnet, optimizer, X_tr, y_tr)
-        #test(convnet, X_te, y_te, "Test")
-        test(convnet, X_tr, y_tr, "Train")
+        train(model, optimizer, X_tr, y_tr)
+        test(model, X_tr, y_tr, "Train")
 
 if __name__ == "__main__":
     main()
-
