@@ -15,7 +15,7 @@ parser.add_argument('--model', default='cnn', help='cnn | capsule')
 parser.add_argument('--seed', default=0, help='random seed')
 args = parser.parse_args()
 
-print("Using model ", args.model)
+print("Using model", args.model)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -135,7 +135,10 @@ def train(model, optimizer, X_tr, y_tr):
         tot_loss += loss.item()
         print(" batch {} [{:.1f}%] loss: {:.4f}".format(
             bch+1, 100 * (bch+1)/num_batch, loss.item()/len(y)))
-    print(" Total loss %.2f" % (tot_loss/len(y_tr)))
+    tot_loss /= len(y_tr)
+    print(" Total loss %.2f" % (tot_loss))
+    return tot_loss
+
 
 
 def test(model, X_te, y_te, mode):
@@ -147,7 +150,9 @@ def test(model, X_te, y_te, mode):
         X = torch.from_numpy(X).float().permute(0, 3, 1, 2).to(device)
         prediction = model(X)
         accuracy += np.sum(y == prediction.cpu().numpy())
-    print("%s Accuracy  %.2f" % (mode, accuracy/len(y_te)))
+    accuracy /= len(y_te)
+    print("%s Accuracy  %.2f" % (mode, accuracy))
+    return accuracy
 
 
 def load_data():
@@ -158,15 +163,20 @@ def load_data():
 
 def main():
     X_tr, y_tr, X_te, y_te = load_data()
-    X_tr, y_tr = X_tr[:640], y_tr[:640]
+    print(len(X_tr))
+    X_tr, y_tr = X_tr[:1024], y_tr[:1024]
     X_te, y_te = X_te[:128], y_te[:128]
     model = ConvNet() if args.model == 'cnn' else CapsuleNet()
     model.to(device)
     optimizer = Adam(model.parameters())
+    train_loss = []
+    train_accuracy = []
     for epoch in range(30):
         print(("Epoch %d " + "-"*70) % (epoch+1))
-        train(model, optimizer, X_tr, y_tr)
-        test(model, X_tr, y_tr, "Train")
+        train_loss.append(train(model, optimizer, X_tr, y_tr))
+        train_accuracy.append(test(model, X_tr, y_tr, "Train"))
+    pickle.dump((train_loss, train_accuracy), \
+        open('result/' + args.model + '_train.p', 'wb'))
 
 if __name__ == "__main__":
     main()
