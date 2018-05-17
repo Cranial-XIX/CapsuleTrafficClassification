@@ -163,7 +163,6 @@ def load_data():
 
 def main():
     X_tr, y_tr, X_te, y_te = load_data()
-    print(len(X_tr))
     X_tr, y_tr = X_tr[:1024], y_tr[:1024]
     X_te, y_te = X_te[:128], y_te[:128]
     model = ConvNet() if args.model == 'cnn' else CapsuleNet()
@@ -171,7 +170,7 @@ def main():
     optimizer = Adam(model.parameters())
     train_loss = []
     train_accuracy = []
-    for epoch in range(30):
+    for epoch in range(10):
         print(("Epoch %d " + "-"*70) % (epoch+1))
         train_loss.append(train(model, optimizer, X_tr, y_tr))
         train_accuracy.append(test(model, X_tr, y_tr, "Train"))

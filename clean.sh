@@ -1,0 +1,2 @@
+rm img/*
+rm result/*
