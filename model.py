@@ -7,7 +7,7 @@ import pickle
 
 from torch.optim import Adam
 
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 NUM_CLASSES = 43
 
 parser = argparse.ArgumentParser()
@@ -15,8 +15,10 @@ parser.add_argument('--model', default='cnn', help='cnn | capsule')
 parser.add_argument('--seed', default=0, help='random seed')
 args = parser.parse_args()
 
+print("Using model ", args.model)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -71,7 +73,7 @@ class CapsuleLayer(nn.Module):
     def forward(self, x):
         if self.n_nodes != -1:
             priors = (x[:, :, None, None, :] @ self.route_weights).squeeze(4)
-            logits = torch.zeros(*priors.size())
+            logits = torch.zeros(*priors.size()).to(device)
             # dynamic routing
             for i in range(self.n_iter):
                 probs = self.softmax(logits)
@@ -111,7 +113,7 @@ class CapsuleNet(nn.Module):
 
         left = self.relu(0.9 - scores) ** 2
         right = self.relu(scores - 0.1) ** 2
-        labels = torch.eye(NUM_CLASSES).index_select(dim=0, index=y)
+        labels = torch.eye(NUM_CLASSES).to(device).index_select(dim=0, index=y)
         margin_loss = labels * left + 0.5 * (1. - labels) * right
 
         return margin_loss.sum() / y.size(0)
@@ -125,9 +127,9 @@ def train(model, optimizer, X_tr, y_tr):
     tot_loss = 0.0
     for bch, (X, y) in enumerate(zip(X_split, y_split)):
         optimizer.zero_grad()
-        loss = model(
-            torch.from_numpy(X).float().permute(0, 3, 1, 2),
-            torch.from_numpy(y))
+        X = torch.from_numpy(X).float().permute(0, 3, 1, 2).to(device)
+        y = torch.from_numpy(y).to(device)
+        loss = model(X, y)
         loss.backward()
         optimizer.step()
         tot_loss += loss.item()
@@ -141,9 +143,10 @@ def test(model, X_te, y_te, mode):
     num_batch = len(y_te) // BATCH_SIZE
     X_split, y_split = np.split(X_te, num_batch), np.split(y_te, num_batch)
     accuracy = 0.0
-    for X, y in zip(X_split, y_split):
-        prediction = model(torch.from_numpy(X).float().permute(0, 3, 1, 2))
-        accuracy += np.sum(y == prediction.numpy())
+    for X, y in zip(X_split, y_split): 
+        X = torch.from_numpy(X).float().permute(0, 3, 1, 2).to(device)
+        prediction = model(X)
+        accuracy += np.sum(y == prediction.cpu().numpy())
     print("%s Accuracy  %.2f" % (mode, accuracy/len(y_te)))
 
 
@@ -155,9 +158,10 @@ def load_data():
 
 def main():
     X_tr, y_tr, X_te, y_te = load_data()
-    X_tr, y_tr = X_tr[:8], y_tr[:8]
+    X_tr, y_tr = X_tr[:640], y_tr[:640]
     X_te, y_te = X_te[:128], y_te[:128]
     model = ConvNet() if args.model == 'cnn' else CapsuleNet()
+    model.to(device)
     optimizer = Adam(model.parameters())
     for epoch in range(30):
         print(("Epoch %d " + "-"*70) % (epoch+1))
