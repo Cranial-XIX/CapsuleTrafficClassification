@@ -1,11 +1,15 @@
+import config
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 
-train_loss_cnn, train_accuracy_cnn = pickle.load(open('result/cnn_train.p', 'rb'))
-train_loss_capsule, train_accuracy_capsule = pickle.load(open('result/capsule_train.p', 'rb'))
+train_loss_cnn, train_accuracy_cnn = pickle.load(
+	open(config.CNN_TRAIN_RESULT_PATH, 'rb'))
+train_loss_capsule, train_accuracy_capsule = pickle.load(
+	open(config.CAPSULE_TRAIN_RESULT_PATH, 'rb'))
+
 f, axarr = plt.subplots(3, sharex=True)
 axarr[0].plot(range(10), train_loss_cnn, label='cnn train loss')
 axarr[1].plot(range(10), train_loss_capsule, label='capsule train loss')
