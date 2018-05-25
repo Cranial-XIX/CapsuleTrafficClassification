@@ -1,24 +1,7 @@
-import argparse
-import numpy as np
+import config
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pickle
-
-from torch.optim import Adam
-
-BATCH_SIZE = 32
-NUM_CLASSES = 43
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--model', default='cnn', help='cnn | capsule')
-parser.add_argument('--seed', default=0, help='random seed')
-args = parser.parse_args()
-
-print("Using model", args.model)
-np.random.seed(args.seed)
-torch.manual_seed(args.seed)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -34,12 +17,13 @@ class ConvNet(nn.Module):
         )
         self.fc1 = nn.Linear(128 * 16 * 16, 128)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(128, NUM_CLASSES)
+        self.fc2 = nn.Linear(128, config.NUM_CLASSES)
         self.lsm = nn.LogSoftmax(dim=1)
 
     def forward(self, x, y=None):
         conv = self.conv(x)
-        scores = self.fc2(self.relu(self.fc1(conv.view(BATCH_SIZE, -1))))
+        scores = self.fc2(
+            self.relu(self.fc1(conv.view(config.BATCH_SIZE, -1))))
         if y is None:
             _, prediction = scores.max(dim=1)
             return prediction
@@ -98,7 +82,7 @@ class CapsuleNet(nn.Module):
         self.primary_capsules = CapsuleLayer(
             n_caps=8, n_nodes=-1, in_C=256, out_C=32, kernel=8, stride=2)
         self.traffic_sign_capsules = CapsuleLayer(
-            n_caps=NUM_CLASSES, n_nodes=32 * 9 * 9, in_C=8, out_C=16)
+            n_caps=config.NUM_CLASSES, n_nodes=32 * 9 * 9, in_C=8, out_C=16)
 
     def forward(self, x, y=None):
         x = self.relu(self.conv1(x))
@@ -113,69 +97,8 @@ class CapsuleNet(nn.Module):
 
         left = self.relu(0.9 - scores) ** 2
         right = self.relu(scores - 0.1) ** 2
-        labels = torch.eye(NUM_CLASSES).to(device).index_select(dim=0, index=y)
+        labels = torch.eye(config.NUM_CLASSES).to(
+            device).index_select(dim=0, index=y)
         margin_loss = labels * left + 0.5 * (1. - labels) * right
 
         return margin_loss.sum() / y.size(0)
-
-
-def train(model, optimizer, X_tr, y_tr):
-    model.train()
-    i = np.random.permutation(len(y_tr))
-    num_batch = len(y_tr) // BATCH_SIZE
-    X_split, y_split = np.split(X_tr[i], num_batch), np.split(y_tr[i], num_batch)
-    tot_loss = 0.0
-    for bch, (X, y) in enumerate(zip(X_split, y_split)):
-        optimizer.zero_grad()
-        X = torch.from_numpy(X).float().permute(0, 3, 1, 2).to(device)
-        y = torch.from_numpy(y).to(device)
-        loss = model(X, y)
-        loss.backward()
-        optimizer.step()
-        tot_loss += loss.item()
-        print(" batch {} [{:.1f}%] loss: {:.4f}".format(
-            bch+1, 100 * (bch+1)/num_batch, loss.item()/len(y)))
-    tot_loss /= len(y_tr)
-    print(" Total loss %.2f" % (tot_loss))
-    return tot_loss
-
-
-
-def test(model, X_te, y_te, mode):
-    model.eval()
-    num_batch = len(y_te) // BATCH_SIZE
-    X_split, y_split = np.split(X_te, num_batch), np.split(y_te, num_batch)
-    accuracy = 0.0
-    for X, y in zip(X_split, y_split): 
-        X = torch.from_numpy(X).float().permute(0, 3, 1, 2).to(device)
-        prediction = model(X)
-        accuracy += np.sum(y == prediction.cpu().numpy())
-    accuracy /= len(y_te)
-    print("%s Accuracy  %.2f" % (mode, accuracy))
-    return accuracy
-
-
-def load_data():
-    X_tr, y_tr = pickle.load(open('data/train.p', 'rb'))
-    X_te, y_te = pickle.load(open('data/test.p', 'rb'))
-    return X_tr, y_tr, X_te, y_te
-
-
-def main():
-    X_tr, y_tr, X_te, y_te = load_data()
-    X_tr, y_tr = X_tr[:1024], y_tr[:1024]
-    X_te, y_te = X_te[:128], y_te[:128]
-    model = ConvNet() if args.model == 'cnn' else CapsuleNet()
-    model.to(device)
-    optimizer = Adam(model.parameters())
-    train_loss = []
-    train_accuracy = []
-    for epoch in range(10):
-        print(("Epoch %d " + "-"*70) % (epoch+1))
-        train_loss.append(train(model, optimizer, X_tr, y_tr))
-        train_accuracy.append(test(model, X_tr, y_tr, "Train"))
-    pickle.dump((train_loss, train_accuracy), \
-        open('result/' + args.model + '_train.p', 'wb'))
-
-if __name__ == "__main__":
-    main()
