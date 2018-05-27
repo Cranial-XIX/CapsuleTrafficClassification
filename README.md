@@ -1,1 +1,1 @@
-# CapsuleTrafficClassification
+# capsule network
